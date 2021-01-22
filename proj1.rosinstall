@@ -1,0 +1,8 @@
+- git:
+    local-name: trac_ik
+    uri: https://bitbucket.org/traclabs/trac_ik.git
+    version: master
+- git:
+    local-name: baxter_pykdl
+    uri: https://github.com/ucb-ee106/baxter_pykdl.git
+    version: master
