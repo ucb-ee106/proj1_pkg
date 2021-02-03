@@ -5,7 +5,7 @@ from utils.utils import *
 import matplotlib.pyplot as plt
 import baxter_interface
 from baxter_pykdl import baxter_kinematics
-from proj1_sols_pkg.srv import TriggerLogging, TriggerLoggingResponse
+from proj1_pkg.srv import TriggerLogging, TriggerLoggingResponse
 from moveit_msgs.msg import RobotTrajectory
 import sys
 

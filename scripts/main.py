@@ -29,7 +29,7 @@ import intera_interface
 import moveit_commander
 from moveit_msgs.msg import DisplayTrajectory, RobotState
 from baxter_pykdl import baxter_kinematics
-from proj1_sols_pkg.srv import TriggerLogging, TriggerLoggingRequest
+from proj1_pkg.srv import TriggerLogging, TriggerLoggingRequest
 
 
 def get_trajectory(limb, kin, ik_solver, planner, args):
@@ -238,7 +238,7 @@ def main():
         # uses MoveIt! to execute the trajectory.  make sure to view it in RViz before running this.
         # the lines above will display the trajectory in RViz
         if args.log:
-            node = roslaunch.core.Node("proj1_sols_pkg", "moveit_plot.py", args="{} {}".format(args.arm, args.rate))
+            node = roslaunch.core.Node("proj1_pkg", "moveit_plot.py", args="{} {}".format(args.arm, args.rate))
             launch = roslaunch.scriptapi.ROSLaunch()
             launch.start()
             process = launch.launch(node)
