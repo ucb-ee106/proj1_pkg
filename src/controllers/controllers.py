@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt
 # Lab imports
 from utils.utils import *
 
+import ee106b_baxter_kdl
+
 # ROS imports
 try:
     import tf
@@ -136,12 +138,19 @@ class Controller:
                 path.joint_trajectory.points[current_index+1].accelerations
             )
 
-            target_position = target_position_low + \
-                (t - time_low)/(time_high - time_low)*(target_position_high - target_position_low)
-            target_velocity = target_velocity_low + \
-                (t - time_low)/(time_high - time_low)*(target_velocity_high - target_velocity_low)
-            target_acceleration = target_acceleration_low + \
-                (t - time_low)/(time_high - time_low)*(target_acceleration_high - target_acceleration_low)
+            if self.is_joinstpace_controller:
+                target_position, target_velocity, target_acceleration = euclidean_interpolate(
+                            target_position_low, target_velocity_low, target_acceleration_low,
+                            target_position_high, target_velocity_high, target_acceleration_high,
+                            time_low, time_high, t)
+            else:
+                target_position, target_velocity = se3_interpolate(
+                    target_position_low, target_velocity_low,
+                    target_position_high, target_velocity_high,
+                    time_low, time_high, t)
+                # Set the target_accelration for workspace paths to zero arbitrarily; this quantity is
+                # never used.
+                target_acceleration = np.zeros(6)
 
         # If you're at the last waypoint, no interpolation is needed
         else:
@@ -224,11 +233,11 @@ class Controller:
 
             for i in range(len(times)):
                 positions_dict = joint_array_to_dict(target_positions[i], self._limb)
-                target_workspace_positions[i, :] = \
-                    self._kin.forward_position_kinematics(joint_values=positions_dict)[:3]
+                fk = self._kin.forward_position_kinematics(joint_values=positions_dict)
+                target_workspace_positions[i, :] = fk[:3]
                 target_workspace_velocities[i, :] = \
                     self._kin.jacobian(joint_values=positions_dict)[:3].dot(target_velocities[i])
-                target_workspace_quaternions[i, :] = np.array([0, 1, 0, 0])
+                target_workspace_quaternions[i, :] = np.array(fk[3:])
 
             # Plot joint space
             plt.figure()
@@ -253,10 +262,9 @@ class Controller:
 
         else:
             # it's workspace
-            target_workspace_positions = target_positions
+            target_workspace_positions = target_positions[:, :3]
             target_workspace_velocities = target_velocities
-            target_workspace_quaternions = np.zeros((len(times), 4))
-            target_workspace_quaternions[:, 1] = 1
+            target_workspace_quaternions = target_positions[:, 3:]
 
         plt.figure()
         workspace_joints = ('X', 'Y', 'Z')
@@ -403,8 +411,8 @@ class FeedforwardJointVelocityController(Controller):
 class WorkspaceVelocityController(Controller):
     """
     Look at the comments on the Controller class above.  The difference between this controller and the
-    PDJointVelocityController is that this controller compares the baxter's current WORKSPACE position and
-    velocity desired WORKSPACE position and velocity to come up with a WORKSPACE velocity command to be sent
+    PDJointVelocityController is that this controller compares the baxter's current WORKSPACE position and 
+    desired WORKSPACE position and velocity to come up with a WORKSPACE velocity command to be sent
     to the baxter.  Then this controller should convert that WORKSPACE velocity command into a joint velocity
     command and sends that to the baxter.  Notice the shape of Kp and Kv
     """
@@ -424,24 +432,31 @@ class WorkspaceVelocityController(Controller):
 
     def step_control(self, target_position, target_velocity, target_acceleration):
         """
-        makes a call to the robot to move according to it's current position and the desired position 
-        according to the input path and the current time. Each Controller below extends this 
-        class, and implements this accordingly. This method should call
-        self._kin.forward_psition_kinematics() and self._kin.forward_velocity_kinematics() to get 
-        the current workspace position and velocity and self._limb.set_joint_velocities() to set 
-        the joint velocity to something.  you may have to look at 
-        http://docs.ros.org/diamondback/api/kdl/html/python/geometric_primitives.html to convert the 
-        output of forward_velocity_kinematics() to a numpy array.  You may find joint_array_to_dict() 
-        in utils.py useful
+        Makes a call to the robot to move according to its current position and the desired position 
+        according to the input path and the current time.
 
-        Remeber that we want to track a trajectory in SE(3), and implement the controller that you
-        derived in Q1 of HW1.
+        target_position will be a 7 vector describing the desired SE(3) configuration where the first
+        3 entries are the desired position vector and the next 4 entries are the desired orientation as
+        a quaternion, all written in spatial coordinates.
+
+        target_velocity is the body-frame se(3) velocity of the desired SE(3) trajectory gd(t). This velocity
+        is given as a 6D Twist (vx, vy, vz, wx, wy, wz).
+
+
+        This method should call self._kin.forward_position_kinematics() to get the current workspace 
+        configuration and self._limb.set_joint_velocities() to set the joint velocity to something.  
+
+        Remeber that we want to track a trajectory in SE(3), and implement the controller described in the
+        project document PDF, which you also derived in Homework 1 Q1 (a).
+
+        You may also find the functions body_jacobian, spatial_jacobian, body_jacobian_pinv, and
+        spatial_jacobian_pinv from utils useful.
 
         Parameters
         ----------
-        target_position: ndarray of desired positions
-        target_velocity: ndarray of desired velocities
-        target_acceleration: ndarray of desired accelerations
+        target_position: (7,) ndarray of desired SE(3) position (px, py, pz, qx, qy, qz, qw) (position + quaternion).
+        target_velocity: (6,) ndarray of desired body-frame se(3) velocity (vx, vy, vz, wx, wy, wz).
+        target_acceleration: ndarray of desired accelerations (should you need this?).
         """
         raise NotImplementedError
         control_input = None        
@@ -449,13 +464,6 @@ class WorkspaceVelocityController(Controller):
 
 
 class PDJointVelocityController(Controller):
-    """
-    Look at the comments on the Controller class above.  The difference between this controller and the 
-    PDJointVelocityController is that this controller turns the desired workspace position and velocity
-    into desired JOINT position and velocity.  Then it compares the difference between the baxter's 
-    current JOINT position and velocity and desired JOINT position and velocity to come up with a
-    joint velocity command and sends that to the baxter.  notice the shape of Kp and Kv
-    """
     def __init__(self, limb, kin, Kp, Kv):
         """
         Parameters
@@ -472,12 +480,11 @@ class PDJointVelocityController(Controller):
 
     def step_control(self, target_position, target_velocity, target_acceleration):
         """
-        makes a call to the robot to move according to it's current position and the desired position 
-        according to the input path and the current time. Each Controller below extends this 
-        class, and implements this accordingly. This method should call
-        self._limb.joint_angle and self._limb.joint_velocity to get the current joint position and velocity
-        and self._limb.set_joint_velocities() to set the joint velocity to something.  You may find
-        joint_array_to_dict() in utils.py useful
+        Makes a call to the robot to move according to it's current position and the desired position 
+        according to the input path and the current time. his method should call
+        get_joint_positions and get_joint_velocities from the utils package to get the current joint 
+        position and velocity and self._limb.set_joint_velocities() to set the joint velocity to something.  
+        You may find joint_array_to_dict() in utils.py useful as well.
 
         Parameters
         ----------
@@ -506,12 +513,25 @@ class PDJointTorqueController(Controller):
 
     def step_control(self, target_position, target_velocity, target_acceleration):
         """
-        makes a call to the robot to move according to it's current position and the desired position 
-        according to the input path and the current time. Each Controller below extends this 
-        class, and implements this accordingly. This method should call
-        self._limb.joint_angle and self._limb.joint_velocity to get the current joint position and velocity
-        and self._limb.set_joint_velocities() to set the joint velocity to something.  You may find
-        joint_array_to_dict() in utils.py useful
+        Makes a call to the robot to move according to its current position and the desired position 
+        according to the input path and the current time. This method should call
+        get_joint_positions and get_joint_velocities from the utils package to get the current joint 
+        position and velocity and self._limb.set_joint_torques() to set the joint torques to something. 
+        You may find joint_array_to_dict() in utils.py useful as well.
+
+        Recall that in order to implement a torque based controller you will need access to the 
+        dynamics matrices M, C, G such that
+
+        M ddq + C dq + G = u
+
+        For this project, you will access the inertia matrix and gravity vector as follows:
+
+        Inertia matrix: self._kin.inertia(positions_dict)
+        Gravity vector: ee106b_baxter_kdl.baxter_gravity_vector(joint_angle_array)
+
+        and you will ignore the coriolis term altogether. This "no coriolis" approximation
+        is one that holds when the joint velocities are low, so you should think about what this
+        means for the kinds of trajectories this controller will be able to successfully track.
 
         Look in section 4.5 of MLS.
 
