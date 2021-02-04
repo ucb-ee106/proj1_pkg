@@ -9,6 +9,7 @@ from math import sin, cos, atan2
 import itertools
 
 try:
+    import rospy
     from geometry_msgs.msg._Point import Point
     import tf.transformations as tfs
     from geometry_msgs.msg import Pose, PoseStamped
@@ -19,7 +20,7 @@ except:
     ros_enabled = False
 
 
-def convert_jointspace_to_workspace_trajectory(joint_traj, limb, kin):
+def convert_jointspace_to_workspace_trajectory(joint_traj, limb, kin, num_ways=300):
     """
     PROJECT 1 PART B
 
@@ -31,25 +32,32 @@ def convert_jointspace_to_workspace_trajectory(joint_traj, limb, kin):
     of the orientation.
     """
     raise NotImplementedError
+    # Interpolates the given joint trajectory to have num_ways waypoints. The result is an 
+    # array of times and joint_positions (where the robot will be at those respective times).
+    # This is done because the trajectories returned by moveit tend to be quite sparse.
+    times, joint_positions = interpolate_path(joint_traj.joint_trajectory, num_ways=num_ways)
 
     traj = JointTrajectory()
     traj.joint_names = limb.joint_names()
     points = []
-    print("Length of trajectory:", len(joint_traj.joint_trajectory.points))
 
-    for i in range(len(joint_traj.joint_trajectory.points) - 1):
-        curr_pos = joint_traj.joint_trajectory.points[i].positions
-        next_pos = joint_traj.joint_trajectory.points[i + 1].positions
+    for i in range(len(joint_positions) - 1):
+        curr_pos = joint_positions[i]     # current vector of joint angles.
+        next_pos = joint_positions[i + 1] # next vector of joint angles.
 
         # Compute workspace configuration and body velocity.
-        # hint: kin.forward_position_kinematics may be useful.
-        curr_workspace_config = None
-        body_velocity = None
+        # hint: kin.forward_position_kinematics, get_g_matrix, and g_matrix_log may be useful.
+        curr_workspace_config = TODO
+
+        if times[i + 1] - times[i] > 1e-5:
+            body_velocity = TODO
+        else:
+            body_velocity = np.zeros(6)
 
         point = JointTrajectoryPoint()
         point.positions = curr_workspace_config
         point.velocities = body_velocity
-        point.time_from_start = joint_traj.joint_trajectory.points[i].time_from_start
+        point.time_from_start = rospy.Duration(times[i])
 
         points.append(point)
 
@@ -65,7 +73,7 @@ def convert_jointspace_to_workspace_trajectory(joint_traj, limb, kin):
     last_point.positions = last_workspace_config
 
     # What should the desired body velocity at this final position?
-    last_point.velocities = None
+    last_point.velocities = TODO # TODO 
 
     last_point.time_from_start = last_time
 
@@ -77,6 +85,29 @@ def convert_jointspace_to_workspace_trajectory(joint_traj, limb, kin):
     robot_traj.joint_trajectory = traj
     return robot_traj
 
+def interpolate_path(joint_traj, num_ways=300):
+    positions_og = [np.array(point.positions) for point in joint_traj.points]
+    times_og = [point.time_from_start.to_sec() for point in joint_traj.points]
+    # print(times_og)
+    total_time = times_og[-1]
+
+    times = list(np.linspace(0, total_time, num=num_ways))
+    positions = []
+
+    curr_idx = 0
+    for time in times:
+        if time > times_og[curr_idx + 1]:
+            curr_idx = curr_idx + 1
+        p1 = positions_og[curr_idx]
+        p2 = positions_og[curr_idx + 1]
+        delta = (time - times_og[curr_idx]) / (times_og[curr_idx + 1] - times_og[curr_idx])
+        positions.append(p1 + delta * (p2 - p1))
+
+    positions.append(positions_og[-1])
+    times.append(total_time)
+    return np.array(times), np.array(positions)
+
+
 def g_matrix_log(g):
     """
     PROJECT 1 PART B
@@ -86,6 +117,8 @@ def g_matrix_log(g):
 
     Hint: the function R_matrix_log has already been implemented for you.
     """
+    raise NotImplementedError
+
     R, p = g[:3, :3], g[:3, 3]
     w = R_matrix_log(g[:3, :3])
 
@@ -100,6 +133,64 @@ def g_matrix_log(g):
         # Your code here
     
     return xi
+
+def euclidean_interpolate(position_low, velocity_low, acceleration_low,
+                          position_high, velocity_high, acceleration_high,
+                          time_low, time_high, time):
+
+    total_time = time_high - time_low
+    elapsed_time = time - time_low
+    delta = elapsed_time / total_time
+
+    target_position = position_low + delta * (position_high - position_low)
+    target_velocity = velocity_low + delta * (velocity_high - velocity_low)
+    target_acceleration = acceleration_low + delta * (acceleration_high - acceleration_low)
+
+    return target_position, target_velocity, target_acceleration
+
+def se3_interpolate(position_low, velocity_low,
+                    position_high, velocity_high,
+                    time_low, time_high, time):
+
+    total_time = time_high - time_low
+    elapsed_time = time - time_low
+    delta = elapsed_time / total_time
+
+    p1, q1 = position_low[:3], position_low[3:]
+    p2, q2 = position_high[:3], position_high[3:]
+
+    p = p1 + delta * (p2 - p1)
+    q = slerp(q1, q2, delta)
+    # q = q1 
+    target_position = np.zeros(7)
+    target_position[:3], target_position[3:] = p, q
+    return target_position, velocity_low
+
+def slerp(q1, q2, t):
+    """Spherical linear interpolation between two quaternions.
+    t is time between 0 and 1."""
+    v0 = np.array(q1)
+    v1 = np.array(q2)
+    dot = np.sum(v0 * v1)
+
+    if dot < 0.0:
+        v1 = -v1
+        dot = -dot
+    
+    DOT_THRESHOLD = 0.9995
+    if dot > DOT_THRESHOLD:
+        result = v0 + t * (v1 - v0)
+        return (result / np.linalg.norm(result))
+    
+    theta_0 = np.arccos(dot)
+    sin_theta_0 = np.sin(theta_0)
+
+    theta = theta_0 * t_array
+    sin_theta = np.sin(theta)
+    
+    s0 = np.cos(theta) - dot * sin_theta / sin_theta_0
+    s1 = sin_theta / sin_theta_0
+    return (s0 * v0) + (s1 * v1)
 
 def length(vec):
     """
@@ -150,6 +241,64 @@ def joint_array_to_dict(vel_torque_array, limb):
     """
 
     return dict(zip(limb.joint_names(), vel_torque_array))
+
+def body_jacobian(kin):
+    """
+    Returns the body jacobian of the kinematic chain kin.
+    """
+    fk = self._kin.forward_position_kinematics()
+    current_position, current_quat = fk[:3], fk[3:]
+    current_config = get_g_matrix(current_position, current_quat)
+    R = current_config[:3, :3]
+    adj_R_inv = np.zeros((6, 6))
+    adj_R_inv[0:3,0:3] = R.T
+    adj_R_inv[3:6,3:6] = R.T
+
+    jac = kin.jacobian()
+    return np.matmul(adj_R_inv, jac)
+
+def spatial_jacobian(kin):
+    """
+    Returns the spatial jacobian of the kinematic chain kin.
+    """
+    fk = self._kin.forward_position_kinematics()
+    current_position, current_quat = fk[:3], fk[3:]
+    current_config = get_g_matrix(current_position, current_quat)
+    p = current_config[:3, 3]
+    adj_p = np.eye(6)
+    adj_p[0:3,3:6] = hat(p)
+
+    jac = kin.jacobian()
+    return np.matmul(adj_p, jac)
+
+def body_jacobian_pinv(kin):
+    """
+    Returns the psuedo-inverse body jacobian of the kinematic chain kin.
+    """
+    fk = self._kin.forward_position_kinematics()
+    current_position, current_quat = fk[:3], fk[3:]
+    current_config = get_g_matrix(current_position, current_quat)
+    R = current_config[:3, :3]
+    adj_R = np.zeros((6, 6))
+    adj_R[0:3,0:3] = R
+    adj_R[3:6,3:6] = R
+
+    jac_pinv = kin.jacobian_pseudo_inverse()
+    return np.matmul(jac_pinv, adj_R)
+
+def spatial_jacobian_pinv(kin):
+    """
+    Returns the pseudo-inverse spatial jacobian of the kinematic chain kin.
+    """
+    fk = self._kin.forward_position_kinematics()
+    current_position, current_quat = fk[:3], fk[3:]
+    current_config = get_g_matrix(current_position, current_quat)
+    p = current_config[:3, 3]
+    adj_p_inv = np.eye(6)
+    adj_p_inv[0:3,3:6] = -hat(p)
+
+    jac_pinv = kin.jacobian_pseudo_inverse()
+    return np.matmul(jac_pinv, adj_p_inv)
 
 def get_joint_positions(limb):
     """

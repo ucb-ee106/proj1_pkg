@@ -3,6 +3,9 @@
 """
 Starter script for lab1. 
 Author: Chris Correa
+
+Updated for Spring 2021 by Amay Saxena.
+
 """
 import numpy as np
 import math
@@ -91,7 +94,7 @@ class MotionPath:
         ax = Axes3D(fig)
          
         # NOTE: Can't pass empty arrays into 3d version of plot()
-        line = plt.plot(target_positions[0], target_positions[1], target_positions[2], lw=2, c='g')[0] # For line plot
+        line = plt.plot(target_positions[:, 0], target_positions[:, 1], target_positions[:, 2], lw=2, c='g')[0] # For line plot
          
         # AXES PROPERTIES]
         # ax.set_xlim3d([limit0, limit1])
@@ -111,7 +114,7 @@ class MotionPath:
 
         times = np.linspace(0, self.total_time, num=num)
         target_positions = np.vstack([self.target_position(t)[:3] for t in times])
-        ax.plot3D(target_positions[0], target_positions[1], target_positions[2], c='g')[0] # For line plot
+        ax.plot3D(target_positions[:, 0], target_positions[:, 1], target_positions[:, 2], c='g')[0] # For line plot
         plt.show()
 
     def plot(self, num=300):
@@ -224,7 +227,7 @@ class MotionPath:
             # the path, why do you think we're doing that here?
             point.positions = theta_t
             point.velocities = (theta_t - theta_t_1) / delta_t
-            point.accelerations = (theta_t - 2*theta_t_1 + theta_t_2) / (2*delta_t)
+            point.accelerations = (theta_t - 2*theta_t_1 + theta_t_2) / (delta_t*delta_t)
             self.previous_computed_ik = theta_t
         else:
             point.positions = self.target_position(t)
@@ -369,6 +372,65 @@ class CircularPath(MotionPath):
         """
         raise NotImplementedError
 
+def verify_velocity(path):
+    """
+    (Requires scipy)
+
+    Use this function to verify that your target_velocity implementation is consistent
+    with your target_position implementation. This function will compute the target position
+    over path.total_time seconds in two ways: first, by calling your target_position method,
+    and second by integrating the output of your target_velocity method (using the matrix exponential,
+    over SE(3)). It will then compare the output of those two methods at each timestep. It then collects
+    the errors between the true onfiguration and the integrated configuration and prints out the mean
+    error and standard deviation. It will also produce a 3D plot with the true trajectory (from target_positions)
+    in red and the integrated trajectory in green. If your velocity implementation is correct, these plots should
+    match exactly (if they match exactly, you will only really be able to see the green plot, since it will
+    be printed over the red one). Also, the mean error should be very small.
+
+    Note: For those curious, the error we use is a Frobenius error metric on SE(3). In particular, if we have two
+    configurations g1 and g2, we compute the scalar "error" between them as d(g1, g2) = ||I - g1^-1 g2||_F
+    where || . ||_F is the Frobenius matrix norm. This error is essentially a measure of how far the configuration
+    g1^-1 g2 is from the identity (of course, if g1 = g2 then g1^-1 g2 = I, and hence d(g1, g2) = 0). Here, we 
+    are using this to compare the SE(3) configuration returned by your target_position function to the one that 
+    results from integrating the se(3) velocity returned by your target_velocity function.
+
+    """
+    import scipy.linalg
+    initial_config = path.target_position(0)
+    g0 = get_g_matrix(initial_config[:3], initial_config[3:])
+    dt = 0.001
+    times = np.arange(0.0, path.total_time, dt)
+    gs = [g0]
+    g = g0
+    errors = []
+    for t in times:
+        true_config = path.target_position(t)
+        g_true = get_g_matrix(true_config[:3], true_config[3:])
+        error = np.linalg.norm(np.matmul(np.linalg.inv(g_true), g) - np.eye(4), ord='fro')
+        errors.append(error)
+        g = np.matmul(g, scipy.linalg.expm(dt * hat(path.target_velocity(t))))
+        gs.append(g)
+
+    print("Mean Frobenius Error:", np.mean(errors))
+    print("Error Standard Deviation:", np.std(errors))
+
+    # plt.plot(errors)
+    # plt.show()
+
+    gs = np.array(gs[:-1]) # remove last config as there is one extra after the previous loop.
+
+    fig = plt.figure()
+    ax = Axes3D(fig)
+
+    positions = gs[:, :3, 3]
+    true_positions = np.array([path.target_position(t) for t in times])
+
+    ax.plot3D(true_positions[:, 0], true_positions[:, 1], true_positions[:, 2], c='r')
+    ax.plot3D(positions[:, 0], positions[:, 1], positions[:, 2], c='g')
+
+    plt.show()
+
+
 if __name__ == '__main__':
     """
     Run this file to visualize plots of your paths. Note: the provided functions only
@@ -376,8 +438,11 @@ if __name__ == '__main__':
     visualize the full trajectory in a 3D plot, use the animate function to see an animation
     of the trajectory as it evolves with time in 3D, and use the plot function to see the (X, Y, Z)
     components of the position and velocity (converted to the spatial frame) plotted against time.
+
+    Finally, you can use the function verify_velocity to check that your velocity implementation
+    is consistent with your position implementation.
     """
 
     path = LinearPath(TODO)
     path.animate()
-
+    verify_velocity(path)

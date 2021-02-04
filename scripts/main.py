@@ -11,10 +11,17 @@ import numpy as np
 from paths.paths import LinearPath, CircularPath
 from utils.utils import *
 from path_planner import PathPlanner
+from controllers.controllers import (
+            WorkspaceVelocityController,
+            PDJointVelocityController,
+            PDJointTorqueController,
+            FeedforwardJointVelocityController
+        )
 
 from trac_ik_python.trac_ik import IK
 
 import rospy
+import roslaunch
 import tf
 import tf2_ros
 import baxter_interface
@@ -22,6 +29,8 @@ import intera_interface
 import moveit_commander
 from moveit_msgs.msg import DisplayTrajectory, RobotState
 from baxter_pykdl import baxter_kinematics
+from proj1_pkg.srv import TriggerLogging, TriggerLoggingRequest
+
 
 def get_trajectory(limb, kin, ik_solver, planner, args):
     """
@@ -39,9 +48,6 @@ def get_trajectory(limb, kin, ik_solver, planner, args):
     -------
     :obj:`moveit_msgs.msg.RobotTrajectory`
     """
-    num_way = args.num_way
-    controller_name = args.controller_name
-    task = args.task
 
     # Instantiate the MotionPath subclasses that you implemented in paths.py
     if task == 'line':
@@ -67,14 +73,13 @@ def get_trajectory(limb, kin, ik_solver, planner, args):
         success, plan, time_taken, error_code = planner.plan_to_pose(pose)
         jointspace_path = plan
 
-        if args.controller_name == 'jointspace':
+        if args.controller_name != 'workspace':
             path = jointspace_path
-        elif args.controller_name == 'workspace':
+        else:
             # PROJECT 1 PART B
             # To be able to use our workspace controller to follow MoveIt generate paths,
             # we need to convert them from jointspace trajectories into workspace trajectories.
             path = convert_jointspace_to_workspace_trajectory(jointspace_path, limb, kin)
-            sys.exit()
         return path
     else:
         raise ValueError('task {} not recognized'.format(task))
@@ -232,15 +237,25 @@ def main():
             sys.exit()
         # uses MoveIt! to execute the trajectory.  make sure to view it in RViz before running this.
         # the lines above will display the trajectory in RViz
+        if args.log:
+            node = roslaunch.core.Node("proj1_pkg", "moveit_plot.py", args="{} {}".format(args.arm, args.rate))
+            launch = roslaunch.scriptapi.ROSLaunch()
+            launch.start()
+            process = launch.launch(node)
+            rospy.wait_for_service('start_logging')
+            start_service = rospy.ServiceProxy('start_logging', TriggerLogging)
+            request = TriggerLoggingRequest(path=robot_trajectory)
+            start_service(robot_trajectory)
+
         planner.execute_plan(robot_trajectory)
+
+        if args.log:
+            r = rospy.Rate(1)
+            while process.is_alive():
+                r.sleep()
+                
     else:
         # PROJECT 1 PART B
-        from controllers.controllers import (
-            WorkspaceVelocityController,
-            PDJointVelocityController,
-            PDJointTorqueController,
-            FeedforwardJointVelocityController
-        )
         controller = get_controller(args.controller_name, limb, kin)
         try:
             input('Press <Enter> to execute the trajectory using YOUR OWN controller')
