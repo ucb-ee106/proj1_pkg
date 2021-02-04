@@ -449,8 +449,16 @@ class WorkspaceVelocityController(Controller):
         Remeber that we want to track a trajectory in SE(3), and implement the controller described in the
         project document PDF, which you also derived in Homework 1 Q1 (a).
 
+        You can use the function baxter_jacobian to get the spatial jacobian of the arm from the
+        ee106b_baxter_kdl package.
+
+        Usage:
+        ee106b_baxter_kdl.baxter_gravity_vector(arm_name, joint_angle_array)
+                        where arm_name is the string "left" or "right".
+
         You may also find the functions body_jacobian, spatial_jacobian, body_jacobian_pinv, and
-        spatial_jacobian_pinv from utils useful.
+        spatial_jacobian_pinv from utils useful. These functions modify the jacobian returned by KDL
+        into the required spatial or body jacobian.
 
         Parameters
         ----------
@@ -527,7 +535,8 @@ class PDJointTorqueController(Controller):
         For this project, you will access the inertia matrix and gravity vector as follows:
 
         Inertia matrix: self._kin.inertia(positions_dict)
-        Gravity vector: ee106b_baxter_kdl.baxter_gravity_vector(joint_angle_array)
+        Gravity vector: ee106b_baxter_kdl.baxter_gravity_vector(arm_name, joint_angle_array)
+                        where arm_name is the string "left" or "right".
 
         and you will ignore the coriolis term altogether. This "no coriolis" approximation
         is one that holds when the joint velocities are low, so you should think about what this

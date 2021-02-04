@@ -40,7 +40,6 @@ def convert_jointspace_to_workspace_trajectory(joint_traj, limb, kin, num_ways=3
     traj = JointTrajectory()
     traj.joint_names = limb.joint_names()
     points = []
-    print("Length of trajectory:", len(joint_traj.joint_trajectory.points))
 
     for i in range(len(joint_positions) - 1):
         curr_pos = joint_positions[i]     # current vector of joint angles.
