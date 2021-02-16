@@ -185,7 +185,7 @@ def slerp(q1, q2, t):
     theta_0 = np.arccos(dot)
     sin_theta_0 = np.sin(theta_0)
 
-    theta = theta_0 * t_array
+    theta = theta_0 * t
     sin_theta = np.sin(theta)
     
     s0 = np.cos(theta) - dot * sin_theta / sin_theta_0

@@ -552,4 +552,4 @@ class PDJointTorqueController(Controller):
         """
         raise NotImplementedError
         control_input = None
-        self._limb.set_joint_velocities(joint_array_to_dict(control_input, self._limb))
+        self._limb.set_joint_torques(joint_array_to_dict(control_input, self._limb))
