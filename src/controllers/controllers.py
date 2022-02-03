@@ -460,12 +460,7 @@ class WorkspaceVelocityController(Controller):
         configuration and self._limb.set_joint_velocities() to set the joint velocity to something.  
         Remember that we want to track a trajectory in SE(3), and implement the controller described in the
         project document PDF, which you also derived in Homework 1 Q1 (a).
-        You can use the function baxter_jacobian to get the spatial jacobian of the arm from the
-        ee106b_baxter_kdl package.
-        Usage:
-        ee106b_baxter_kdl.baxter_gravity_vector(arm_name, joint_angle_array)
-                        where arm_name is the string "left" or "right".
-        You may also find the functions body_jacobian, spatial_jacobian, body_jacobian_pinv, and
+        You may find the functions body_jacobian, spatial_jacobian, body_jacobian_pinv, and
         spatial_jacobian_pinv from utils useful. These functions modify the jacobian returned by KDL
         into the required spatial or body jacobian.
         Parameters
@@ -508,7 +503,7 @@ class PDJointVelocityController(Controller):
         get_joint_positions and get_joint_velocities from the utils package to get the current joint 
         position and velocity and self._limb.set_joint_velocities() to set the joint velocity to something.  
         You may find joint_array_to_dict() in utils.py useful as well.
-        
+
         Parameters
         ----------
         target_position: 7x' :obj:`numpy.ndarray` of desired positions
@@ -546,9 +541,7 @@ class PDJointTorqueController(Controller):
         M ddq + C dq + G = u
         For this project, you will access the inertia matrix and gravity vector as follows:
         Inertia matrix: self._kin.inertia(positions_dict)
-        Gravity vector: ee106b_baxter_kdl.baxter_gravity_vector(arm_name, joint_angle_array)
-                        where arm_name is the string "left" or "right".
-        and you will ignore the coriolis term altogether. This "no coriolis" approximation
+        You will ignore the coriolis term altogether. This "no coriolis" approximation
         is one that holds when the joint velocities are low, so you should think about what this
         means for the kinds of trajectories this controller will be able to successfully track.
         Look in section 4.5 of MLS.
