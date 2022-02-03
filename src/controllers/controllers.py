@@ -458,7 +458,7 @@ class WorkspaceVelocityController(Controller):
         is given as a 6D Twist (vx, vy, vz, wx, wy, wz).
         This method should call self._kin.forward_position_kinematics() to get the current workspace 
         configuration and self._limb.set_joint_velocities() to set the joint velocity to something.  
-        Remeber that we want to track a trajectory in SE(3), and implement the controller described in the
+        Remember that we want to track a trajectory in SE(3), and implement the controller described in the
         project document PDF, which you also derived in Homework 1 Q1 (a).
         You can use the function baxter_jacobian to get the spatial jacobian of the arm from the
         ee106b_baxter_kdl package.
