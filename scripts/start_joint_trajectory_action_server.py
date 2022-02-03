@@ -84,7 +84,7 @@ def start_server(limb, rate, mode):
                                                 rate, mode))
         jtas.append(JointTrajectoryActionServer('left', dyn_cfg_srv,
                                                 rate, mode))
-        print(jtas)
+        print jtas
     else:
         jtas.append(JointTrajectoryActionServer(limb, dyn_cfg_srv, rate, mode))
 

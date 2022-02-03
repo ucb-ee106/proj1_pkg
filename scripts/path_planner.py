@@ -83,10 +83,7 @@ class PathPlanner(object):
         orientation_constraints: A list of moveit_msgs/OrientationConstraint messages
 
         Outputs:
-        success: boolean success flag.
-        plan: A moveit_msgs/RobotTrajectory path.
-        time_taken: planning time.
-        error_code: MoveitErrorCodes.
+        path: A moveit_msgs/RobotTrajectory path
         """
 
         self._group.set_pose_target(target)
@@ -97,8 +94,9 @@ class PathPlanner(object):
             constraints.orientation_constraints = orientation_constraints
             self._group.set_path_constraints(constraints)
 
-        success, plan, time_taken, error_code = self._group.plan()
-        return success, plan, time_taken, error_code
+        plan = self._group.plan()
+
+        return plan
 
     def plan_to_joint_pos(self, target_joints):
         """
@@ -109,15 +107,12 @@ class PathPlanner(object):
             where n is the number of joints
 
         Outputs:
-        success: boolean success flag.
-        plan: A moveit_msgs/RobotTrajectory path.
-        time_taken: planning time.
-        error_code: MoveitErrorCodes.
+        path: A moveit_msgs/RobotTrajectory path
         """
+        self._group.set_num_planning_attempts(100)
         self._group.set_start_state_to_current_state()
         self._group.set_joint_value_target(target_joints)
-        success, plan, time_taken, error_code = self._group.plan()
-        return success, plan, time_taken, error_code
+        return self._group.plan()
 
     def execute_plan(self, plan):
         """

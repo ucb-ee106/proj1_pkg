@@ -7,8 +7,8 @@ from setuptools import setup
 requirements = []
 
 setup(name='proj1_pkg',
-      version='0.1.0',
-      description='Project 1 package for EE 106B',
+      version='0.0.0',
+      description='lab1 package for EE 106B',
       author='Chris Correa',
       author_email='chris.correa@berkeley.edu',
       package_dir = {'': 'src'},

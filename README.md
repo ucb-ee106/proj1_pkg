@@ -1,2 +1,1 @@
-# proj1_pkg
-Start code for EECS 106B project 1
+ROS Package for EE 106B Lab 1: Trajectory Tracking with Baxter
